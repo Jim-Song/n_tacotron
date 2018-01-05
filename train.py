@@ -13,6 +13,7 @@ from hparams import hparams, hparams_debug_string
 from models import create_model
 from text import sequence_to_text
 from util import audio, infolog, plot, ValueWindow
+from weight_norm_fbank_10782_20171124_low25_high3700_global_norm.ResCNN_wn_A_softmax_prelu_2deeper_group import ResCNN
 log = infolog.log
 
 
@@ -64,7 +65,7 @@ def average_gradients(tower_grads):
 def _learning_rate_decay(init_lr, global_step, num_gpu=1):
     # Noam scheme from tensor2tensor:
     warmup_steps = 4000.0
-    step = tf.cast(global_step * num_gpu + 1, dtype=tf.float32)
+    step = tf.cast(global_step * (num_gpu + 1) / 2 + 1, dtype=tf.float32)
     return init_lr * warmup_steps ** 0.5 * tf.minimum(step * warmup_steps ** -1.5, step ** -0.5) * (num_gpu + 1) / 2
 # ---------------------------------------------------------------------------------
 
@@ -114,10 +115,19 @@ def train(log_dir, args):
       for i, GPU_id in enumerate(GPUs_id):
         with tf.device('/gpu:%d' % GPU_id):
           with tf.name_scope('GPU_%d' % GPU_id):
+
+
+            net = ResCNN(data=mel_targets[i], batch_size=hparams.batch_size, hyparam=hparams)
+            net.inference()
+
+            voice_print_feature = tf.reduce_mean(net.features, 0)
+
+
             models.append(None)
             models[i] = create_model(args.model, hparams)
             models[i].initialize(inputs=inputs[i], input_lengths=input_lengths[i],
-                                 mel_targets=mel_targets[i], linear_targets=linear_targets[i])
+                                 mel_targets=mel_targets[i], linear_targets=linear_targets[i],
+                                 voice_print_feature=voice_print_feature)
             models[i].add_loss()
             tower_loss.append(models[i].loss)
 
@@ -131,6 +141,7 @@ def train(log_dir, args):
 
 
     # apply average gradient
+
     with tf.control_dependencies(tf.get_collection(tf.GraphKeys.UPDATE_OPS)):
       apply_gradient_op = optimizer.apply_gradients(gradients, global_step=global_step)
 

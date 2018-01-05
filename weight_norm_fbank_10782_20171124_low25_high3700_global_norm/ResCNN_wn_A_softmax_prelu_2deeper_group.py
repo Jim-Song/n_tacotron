@@ -8,17 +8,19 @@ from tensorflow.python.training import moving_averages
 class ResCNN(object):
   """ResNet model."""
 
-  def __init__(self, data, labels, num_classes, batch_size, weight_decay, bottleneck, mode, cos_m, lamda=None):
+  #def __init__(self, data, labels, num_classes, batch_size, weight_decay, bottleneck, mode, cos_m, lamda=None):
+  def __init__(self, data, labels=None, num_classes=None, batch_size=32, weight_decay=None, bottleneck=True, mode='train', cos_m=1, lamda=None, hyparam=None):
     """ResNet constructor.
     Args:
       images: Batches of images. [batch_size, image_size, image_size, 3]
       labels: Batches of labels. [batch_size, num_classes]
       mode: One of 'train' and 'eval'.
     """
-    self.truths = labels
-    self.data = data
+    self.data = tf.expand_dims(data, -1)
+
     self.num_classes = num_classes
-    self.labels = tf.reshape(tf.one_hot(labels, tf.constant(num_classes)),[batch_size, num_classes])
+    if labels is not None:
+      self.labels = tf.reshape(tf.one_hot(labels, tf.constant(num_classes)),[batch_size, num_classes])
     self.mode = mode
     self.batch_size = batch_size
     self.weight_decay = weight_decay
@@ -27,12 +29,13 @@ class ResCNN(object):
     self.init = False
     self.lamda = lamda
     self.cos_m = cos_m
+    self._hparams = hyparam
 
   def inference(self):
     """Build the core model within the graph."""
     with tf.variable_scope('init'):
+
       x = self.data
-      #x = self._conv('init_conv', x, 3, 3, 16, self._stride_arr(1))
 
     activate_before_residual = [True, False, False]
     if self.use_bottleneck:
@@ -84,18 +87,24 @@ class ResCNN(object):
         # x = res_func(x, filters[3], filters[3], self._stride_arr(1), False)
 
     with tf.variable_scope('unit_last'):
-      # x = self._batch_norm('final_bn', x)
       x = self._prelu(x)
       x = self._global_avg_pool(x)
 
     with tf.variable_scope('unit_ln'):
-      x = tf.reshape(x, [self.batch_size, 2048])
-      x = self._fully_connected_wn(x, 512)
+      x = tf.reshape(x, [self.batch_size, int(2048/64*self._hparams.num_mels)])
+      x = self._fully_connected_wn(x, 1024)
 
-    with tf.variable_scope('logit'):
-      logits = angular_func(x, self.num_classes)
-      self.logits = logits
-      self.predictions = tf.nn.softmax(logits)
+    #with tf.variable_scope('logit'):
+
+      # ---------------------------------------------
+      #logits = angular_func(x, self.num_classes)
+      # ---------------------------------------------
+
+      #self.logits = logits
+
+      # ---------------------------------------------
+      #self.predictions = tf.nn.softmax(logits)
+      # ---------------------------------------------
     
     x= tf.nn.l2_normalize(x, dim=1)
     self.features = x
@@ -254,8 +263,9 @@ class ResCNN(object):
               stddev=np.sqrt(2.0/n)))
       return tf.nn.conv2d(x, kernel, strides, padding='SAME')
       
-  def _conv_wn(self, name, x, filter_size, in_filters, out_filters, strides, init_scale=1.):
+  def _conv_wn(self, name, x, filter_size, in_filters, out_filters, strides):
     """Convolution."""
+    out_filters = int(out_filters)
     with tf.variable_scope(name):
       kernel = tf.get_variable(
           'DW', [filter_size, filter_size, in_filters, out_filters],

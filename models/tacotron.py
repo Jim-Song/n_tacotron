@@ -15,7 +15,7 @@ class Tacotron():
     self._hparams = hparams
 
 
-  def initialize(self, inputs, input_lengths, mel_targets=None, linear_targets=None):
+  def initialize(self, inputs, input_lengths, mel_targets=None, linear_targets=None, voice_print_feature=None):
     '''Initializes the model for inference.
 
     Sets "mel_outputs", "linear_outputs", and "alignments" fields.
@@ -32,6 +32,11 @@ class Tacotron():
         of steps in the output time series, F is num_freq, and values are entries in the linear
         spectrogram. Only needed for training.
     '''
+
+
+
+
+
     with tf.variable_scope('inference') as scope:
       is_training = linear_targets is not None
       batch_size = tf.shape(inputs)[0]
@@ -46,17 +51,15 @@ class Tacotron():
       # Encoder
       prenet_outputs = prenet(embedded_inputs, is_training)                       # [N, T_in, 128]
       encoder_outputs = encoder_cbhg(prenet_outputs, input_lengths, is_training)  # [N, T_in, 256]
-
       # Attention
+      voice_print_feature = tf.tile([voice_print_feature], [hp.batch_size, 1])
       attention_cell = AttentionWrapper(
-        DecoderPrenetWrapper(GRUCell(256), is_training),
+        DecoderPrenetWrapper(GRUCell(256), is_training, voice_print_feature=voice_print_feature),
         BahdanauAttention(256, encoder_outputs),
         alignment_history=True,
         output_attention=False)                                                  # [N, T_in, 256]
-
       # Concatenate attention context vector and RNN cell output into a 512D vector.
       concat_cell = ConcatOutputAndAttentionWrapper(attention_cell)              # [N, T_in, 512]
-
       # Decoder (layers specified bottom to top):
       decoder_cell = MultiRNNCell([
           OutputProjectionWrapper(concat_cell, 256),
