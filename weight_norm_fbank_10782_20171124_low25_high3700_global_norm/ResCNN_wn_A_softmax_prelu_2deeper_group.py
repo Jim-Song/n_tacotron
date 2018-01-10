@@ -16,7 +16,8 @@ class ResCNN(object):
       labels: Batches of labels. [batch_size, num_classes]
       mode: One of 'train' and 'eval'.
     """
-    self.data = tf.expand_dims(data, -1)
+    self.data2 = data
+    self.data = tf.expand_dims(self.data2, -1)
 
     self.num_classes = num_classes
     if labels is not None:
