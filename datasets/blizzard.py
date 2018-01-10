@@ -14,8 +14,8 @@ _min_confidence = 90
 books = [
   'ATrampAbroad',
   'TheManThatCorruptedHadleyburg',
-  # 'LifeOnTheMississippi',
-  # 'TheAdventuresOfTomSawyer',
+  'LifeOnTheMississippi',
+  'TheAdventuresOfTomSawyer',
 ]
 
 def build_from_path(in_dir, out_dir, num_workers=1, tqdm=lambda x: x):

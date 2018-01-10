@@ -22,7 +22,7 @@ class ResCNN(object):
     if labels is not None:
       self.labels = tf.reshape(tf.one_hot(labels, tf.constant(num_classes)),[batch_size, num_classes])
     self.mode = mode
-    self.batch_size = batch_size
+    self.batch_size = tf.shape(data)[0]
     self.weight_decay = weight_decay
     self._extra_train_ops = []
     self.use_bottleneck = bottleneck
@@ -92,6 +92,8 @@ class ResCNN(object):
 
     with tf.variable_scope('unit_ln'):
       x = tf.reshape(x, [self.batch_size, int(2048/64*self._hparams.num_mels)])
+      #print(x.get_shape())
+      #print('1')
       x = self._fully_connected_wn(x, 1024)
 
     #with tf.variable_scope('logit'):
@@ -307,9 +309,9 @@ class ResCNN(object):
     return tf.nn.xw_plus_b(x, w, b)
     
   def _fully_connected_wn(self, x, out_dim, init_scale=1.):
-    x = tf.reshape(x, [self.batch_size, -1])
-    w = tf.get_variable('DW', [int(x.get_shape()[1]), out_dim], 
-        tf.float32, tf.random_normal_initializer(0, 0.05), trainable=True)
+    #x = tf.reshape(x, [self.batch_size, -1])
+    #print(x.get_shape())
+    w = tf.get_variable('DW', [x.get_shape()[1], 1024], tf.float32, tf.random_normal_initializer(0, 0.05), trainable=True)
     g = tf.get_variable('g', [out_dim], dtype=tf.float32, initializer=tf.constant_initializer(1.0, tf.float32), trainable=True)
     b = tf.get_variable('b', [out_dim], dtype=tf.float32, initializer=tf.constant_initializer(0.0, tf.float32), trainable=True)
     x = tf.matmul(x, w)

@@ -52,7 +52,7 @@ class Tacotron():
       prenet_outputs = prenet(embedded_inputs, is_training)                       # [N, T_in, 128]
       encoder_outputs = encoder_cbhg(prenet_outputs, input_lengths, is_training)  # [N, T_in, 256]
       # Attention
-      voice_print_feature = tf.tile([voice_print_feature], [hp.batch_size, 1])
+      voice_print_feature = tf.tile([voice_print_feature], [batch_size, 1])
       attention_cell = AttentionWrapper(
         DecoderPrenetWrapper(GRUCell(256), is_training, voice_print_feature=voice_print_feature),
         BahdanauAttention(256, encoder_outputs),
@@ -78,7 +78,7 @@ class Tacotron():
 
       (decoder_outputs, _), final_decoder_state, _ = tf.contrib.seq2seq.dynamic_decode(
         BasicDecoder(output_cell, helper, decoder_init_state),
-        maximum_iterations=hp.max_iters)                                        # [N, T_out/r, M*r]
+        maximum_iterations=hp.max_iters*4)                                        # [N, T_out/r, M*r]
 
       # Reshape outputs to be one output per entry
       mel_outputs = tf.reshape(decoder_outputs, [batch_size, -1, hp.num_mels]) # [N, T_out, M]

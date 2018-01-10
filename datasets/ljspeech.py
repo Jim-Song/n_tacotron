@@ -28,12 +28,12 @@ def build_from_path(in_dir, out_dir, num_workers=1, tqdm=lambda x: x):
       parts = line.strip().split('|')
       wav_path = os.path.join(in_dir, 'wavs', '%s.wav' % parts[0])
       text = parts[2]
-      futures.append(executor.submit(partial(_process_utterance, out_dir, index, wav_path, text)))
+      futures.append(executor.submit(partial(_process_utterance, out_dir, index, wav_path, text, person_id=1)))
       index += 1
   return [future.result() for future in tqdm(futures)]
 
 
-def _process_utterance(out_dir, index, wav_path, text):
+def _process_utterance(out_dir, index, wav_path, text, person_id=1):
   '''Preprocesses a single utterance audio/text pair.
 
   This writes the mel and linear scale spectrograms to disk and returns a tuple to write
@@ -66,4 +66,4 @@ def _process_utterance(out_dir, index, wav_path, text):
   np.save(os.path.join(out_dir, mel_filename), mel_spectrogram.T, allow_pickle=False)
 
   # Return a tuple describing this training example:
-  return (spectrogram_filename, mel_filename, n_frames, text)
+  return (spectrogram_filename, mel_filename, n_frames, text, person_id)

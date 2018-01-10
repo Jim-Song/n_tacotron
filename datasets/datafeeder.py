@@ -17,20 +17,52 @@ _pad = 0
 class DataFeeder(threading.Thread):
   '''Feeds batches of data into a queue on a background thread.'''
 
-  def __init__(self, coordinator, metadata_filename, hparams):
+  def __init__(self, coordinator, training_path, hparams):
     super(DataFeeder, self).__init__()
     self._coord = coordinator
     self._hparams = hparams
     self._cleaner_names = [x.strip() for x in hparams.cleaners.split(',')]
     self._offset = 0
+    self._offset_person_id = 0
     self._batch_in_queue = 0
+    self._datasets = hparams.datasets
 
     # Load metadata:
-    self._datadir = os.path.dirname(metadata_filename)
-    with open(metadata_filename, encoding='utf-8') as f:
-      self._metadata = [line.strip().split('|') for line in f]
-      hours = sum((int(x[2]) for x in self._metadata)) * hparams.frame_shift_ms / (3600 * 1000)
-      log('Loaded metadata for %d examples (%.2f hours)' % (len(self._metadata), hours))
+    #self._datadir = os.path.dirname(metadata_filename)
+    #with open(metadata_filename, encoding='utf-8') as f:
+    #  self._metadata = [line.strip().split('|') for line in f]
+    #  hours = sum((int(x[2]) for x in self._metadata)) * hparams.frame_shift_ms / (3600 * 1000)
+    #  log('Loaded metadata for %d examples (%.2f hours)' % (len(self._metadata), hours))
+    # self._metadata
+    # self._datadir
+    self._metadata = []
+    global_parson_id = 0
+    for dataset in self._datasets:
+      metadata_filename = os.path.join(training_path, dataset, 'train.txt')
+      datadir = os.path.dirname(metadata_filename)
+      #exist_person_id correlate the global_person_id with current person_id
+      exist_person_id = {}
+      with open(metadata_filename, encoding='utf-8') as f:
+        metadata = [line.strip().split('|') for line in f]
+        hours = sum((int(x[2]) for x in metadata)) * hparams.frame_shift_ms / (3600 * 1000)
+        log('Loaded ' + dataset + ' metadata for %d examples (%.2f hours)' % (len(metadata), hours))
+        for item in metadata:
+          #item=[vctk-spec-23918.npy,vctk-mel-23918.npy,329,They say that vital evidence was not heard in court.,60]
+          person_id = item[4]
+          item[0] = os.path.join(datadir, item[0])
+          item[1] = os.path.join(datadir, item[1])
+          if not person_id in exist_person_id:
+            exist_person_id[person_id] = global_parson_id
+            global_parson_id += 1
+            self._metadata.append([])
+          global_person_id_crrt = exist_person_id[person_id]
+          self._metadata[global_person_id_crrt].append(item)
+
+
+
+
+
+
 
     # Create placeholders for inputs and targets. Don't specify batch size because we want to
     # be able to feed different sized batches at eval time.
@@ -84,12 +116,60 @@ class DataFeeder(threading.Thread):
     # Read a group of examples:
     n = self._hparams.batch_size * self._hparams.num_GPU
     r = self._hparams.outputs_per_step
-    examples = [self._get_next_example() for i in range(n * _batches_per_group)]
+
+    print('current person id %d' % self._offset_person_id)
+    # if the number of rest items is large
+    if len(self._metadata[self._offset_person_id]) - self._offset > n * _batches_per_group:
+      examples = [self._get_next_example() for i in range(n * _batches_per_group)]
+    # if the of the rest is little, then read in the rest to generate moderate number of batches and update the
+    # offset_person_id
+    if len(self._metadata[self._offset_person_id]) - self._offset <= n * _batches_per_group:
+      batches_per_group_crrt = int( (len(self._metadata[self._offset_person_id]) - self._offset)/n ) + 1
+      examples = [self._get_next_example() for i in range(n * batches_per_group_crrt)]
+      self._offset_person_id += 1
+      self._offset = 0
+      if self._offset_person_id >= len(self._metadata):
+        self._offset_person_id = 0
+        random.shuffle(self._metadata)
+
+
+
 
     # Bucket examples based on similar output sequence length for efficiency:
     examples.sort(key=lambda x: x[-1])
     batches = [examples[i:i+n] for i in range(0, len(examples), n)]
-    #random.shuffle(batches)
+    #print('batches')
+    #split the batches in case the big wav file induct Out Of Memory
+    def split_list(list, n):
+      output = []
+      for i in range(n):
+        output.append(list[int(len(list)*i/n): int(len(list)*(i+1)/n)])
+      return output
+    batches2 = []
+    for i, batch in enumerate(batches):
+      print('len of spec %d' % batches[i][-1][-1])
+      if batches[i][-1][-1] / (self._hparams.max_iters * self._hparams.outputs_per_step) > 4:
+        del(batches[i])
+        #print(len(batches2))
+      elif batches[i][-1][-1] / (self._hparams.max_iters * self._hparams.outputs_per_step) >2:
+        del (batches[i])
+        split_batch = split_list(batch, 4)
+        for item in split_batch:
+          batches2.append(item)
+        #print(len(batches2))
+      elif batches[i][-1][-1] / (self._hparams.max_iters * self._hparams.outputs_per_step) >1:
+        del (batches[i])
+        split_batch = split_list(batch, 2)
+        for item in split_batch:
+          batches2.append(item)
+        #print(len(batches2))
+      else:
+        batches2.append(batch)
+        #print(len(batches2))
+    batches = batches2
+
+
+    random.shuffle(batches)
 
     log('Generated %d batches of size %d in %.03f sec' % (len(batches), n, time.time() - start))
     for batch in batches:
@@ -99,21 +179,27 @@ class DataFeeder(threading.Thread):
       log('self._batch_in_queue: %s' % str(self._batch_in_queue), slack=True)
 
 
+
+
   def _get_next_example(self):
     '''Loads a single example (input, mel_target, linear_target, cost) from disk'''
-    if self._offset >= len(self._metadata):
-      self._offset = 0
-      random.shuffle(self._metadata)
-    meta = self._metadata[self._offset]
-    self._offset += 1
+    linear_target = range(self._hparams.max_iters * self._hparams.outputs_per_step * 4 + 1)
+    while len(linear_target) > self._hparams.max_iters * self._hparams.outputs_per_step * 4 - 1:
+      if self._offset >= len(self._metadata[self._offset_person_id]):
+        self._offset = 0
+        random.shuffle(self._metadata[self._offset_person_id])
 
-    text = meta[3]
-    if self._cmudict and random.random() < _p_cmudict:
-      text = ' '.join([self._maybe_get_arpabet(word) for word in text.split(' ')])
+      meta = self._metadata[self._offset_person_id][self._offset]
+      self._offset += 1
 
-    input_data = np.asarray(text_to_sequence(text, self._cleaner_names), dtype=np.int32)
-    linear_target = np.load(os.path.join(self._datadir, meta[0]))
-    mel_target = np.load(os.path.join(self._datadir, meta[1]))
+      text = meta[3]
+      if self._cmudict and random.random() < _p_cmudict:
+        text = ' '.join([self._maybe_get_arpabet(word) for word in text.split(' ')])
+
+      input_data = np.asarray(text_to_sequence(text, self._cleaner_names), dtype=np.int32)
+      linear_target = np.load(meta[0])
+      mel_target = np.load(meta[1])
+
     return (input_data, mel_target, linear_target, len(linear_target))
 
 

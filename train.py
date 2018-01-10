@@ -83,6 +83,13 @@ def train(log_dir, args):
   # graph
   with tf.Graph().as_default(), tf.device('/cpu:0'):
 
+    #new attributes of hparams
+    #hparams.num_GPU = len(GPUs_id)
+    #hparams.datasets = eval(args.datasets)
+    hparams.datasets = eval(args.datasets)
+    if args.batch_size:
+      hparams.batch_size = args.batch_size
+
     # Multi-GPU settings
     GPUs_id = eval(args.GPUs_id)
     hparams.num_GPU = len(GPUs_id)
@@ -221,8 +228,8 @@ def train(log_dir, args):
 
 def main():
   parser = argparse.ArgumentParser()
-  parser.add_argument('--base_dir', default=os.path.expanduser('~/tts/n_tacotron'))
-  parser.add_argument('--input', default='training/train.txt')
+  parser.add_argument('--base_dir', default=os.path.expanduser('./'))
+  parser.add_argument('--input', default='training')
   parser.add_argument('--model', default='tacotron')
   parser.add_argument('--name', help='Name of the run. Used for logging. Defaults to model name.')
   parser.add_argument('--hparams', default='',
@@ -237,6 +244,8 @@ def main():
   parser.add_argument('--git', action='store_true', help='If set, verify that the client is clean.')
   parser.add_argument('--GPUs_id', default='[0]', help='The GPUs\' id list that will be used. Default is 0')
   parser.add_argument('--description', default=None, help='description of the model')
+  parser.add_argument('--datasets', default="['npy_ljspeech']", help='the datasets used for training')# "['npy_vctk', 'npy_ljspeech']"
+  parser.add_argument('--batch_size', default=None, type=int, help='batch_size')  #
 
 
   args = parser.parse_args()
