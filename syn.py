@@ -3,6 +3,7 @@ import argparse
 from synthesizer import Synthesizer
 import os
 import numpy as np
+from hparams import hparams
 
 
 
@@ -32,11 +33,20 @@ def main():
   parser.add_argument('--output_dir', default='./synthesis', help='the output dir')
   parser.add_argument('--output_prefix', default=' ', help='the prefix of the name of the output')
   parser.add_argument('--model_path', default=' ', help='path of the trained model')
+  parser.add_argument('--prenet_layer1', default=256, type=int, help='batch_size')  #
+  parser.add_argument('--prenet_layer2', default=128, type=int, help='batch_size')  #
+  parser.add_argument('--gru_size', default=256, type=int, help='batch_size')  #
+  parser.add_argument('--attention_size', default=256, type=int, help='batch_size')  #
 
   args = parser.parse_args()
 
+  hparams.prenet_layer1 = args.prenet_layer1
+  hparams.prenet_layer2 = args.prenet_layer2
+  hparams.gru_size = args.gru_size
+  hparams.attention_size = args.attention_size
+
   #log_dir = os.path.join(args.base_dir, 'logs-%s-%s' % (run_name, args.description))
-  os.makedirs(args.output_dir, exist_ok=True)
+  os.makedirs(os.path.join(args.output_dir, args.output_prefix), exist_ok=True)
 
 
 
@@ -59,14 +69,14 @@ def main():
 
   mel_spectrograms = _prepare_targets(mel_spectrograms, 1)
 
-  synthesizer = Synthesizer()
+  synthesizer = Synthesizer(hparams)
   synthesizer.load(args.model_path)
 
   for text in sentences:
 
     wav = synthesizer.synthesize(text=text, mel_spec=mel_spectrograms)
 
-    out = os.path.join(args.output_dir, args.output_prefix+text+'.wav')
+    out = os.path.join(args.output_dir, args.output_prefix, text+'.wav')
     audio.save_wav(wav, out)
 
 

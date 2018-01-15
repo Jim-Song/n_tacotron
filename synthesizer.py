@@ -1,7 +1,7 @@
 import io
 import numpy as np
 import tensorflow as tf
-from hparams import hparams
+#from hparams import hparams
 from librosa import effects
 from models import create_model
 from text import text_to_sequence
@@ -10,19 +10,23 @@ from weight_norm_fbank_10782_20171124_low25_high3700_global_norm.ResCNN_wn_A_sof
 
 
 class Synthesizer:
+
+  def __init__(self, hparams):
+    self.hparams = hparams
+
   def load(self, checkpoint_path, model_name='tacotron'):
     print('Constructing model: %s' % model_name)
     inputs = tf.placeholder(tf.int32, [1, None], 'inputs')
     input_lengths = tf.placeholder(tf.int32, [1], 'input_lengths')
-    mel_spec =  tf.placeholder(tf.float32, [None, None, hparams.num_mels], 'mel_targets')
+    mel_spec =  tf.placeholder(tf.float32, [None, None, self.hparams.num_mels], 'mel_targets')
 
     with tf.variable_scope('model') as scope:
 
-      self.net = ResCNN(data=mel_spec, hyparam=hparams)
+      self.net = ResCNN(data=mel_spec, hyparam=self.hparams)
       self.net.inference()
       voice_print_feature = tf.reduce_mean(self.net.features, 0)
 
-      self.model = create_model(model_name, hparams)
+      self.model = create_model(model_name, self.hparams)
       self.model.initialize(inputs=inputs, input_lengths=input_lengths, voice_print_feature=voice_print_feature)
       self.wav_output = audio.inv_spectrogram_tensorflow(self.model.linear_outputs[0])
 
@@ -34,7 +38,7 @@ class Synthesizer:
 
 
   def synthesize(self, text, mel_spec):
-    cleaner_names = [x.strip() for x in hparams.cleaners.split(',')]
+    cleaner_names = [x.strip() for x in self.hparams.cleaners.split(',')]
     seq = text_to_sequence(text, cleaner_names)
     feed_dict = {
       self.model.inputs: [np.asarray(seq, dtype=np.int32)],

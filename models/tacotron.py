@@ -41,6 +41,12 @@ class Tacotron():
       is_training = linear_targets is not None
       batch_size = tf.shape(inputs)[0]
       hp = self._hparams
+      '''
+      hparams.prenet_layer1 = args.prenet_layer1
+      hparams.prenet_layer2 = args.prenet_layer2
+      hparams.gru_size = args.gru_size
+      hparams.attention_size = args.attention_size
+      '''
 
       # Embeddings
       embedding_table = tf.get_variable(
@@ -54,8 +60,9 @@ class Tacotron():
       # Attention
       voice_print_feature = tf.tile([voice_print_feature], [batch_size, 1])
       attention_cell = AttentionWrapper(
-        DecoderPrenetWrapper(GRUCell(256), is_training, voice_print_feature=voice_print_feature),
-        BahdanauAttention(256, encoder_outputs),
+        DecoderPrenetWrapper(GRUCell(hp.gru_size), is_training, voice_print_feature=voice_print_feature,
+                             prenet_layer1=hp.prenet_layer1, prenet_layer2=hp.prenet_layer2),
+        BahdanauAttention(hp.attention_size, encoder_outputs),
         alignment_history=True,
         output_attention=False)                                                  # [N, T_in, 256]
       # Concatenate attention context vector and RNN cell output into a 512D vector.

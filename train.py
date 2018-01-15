@@ -66,7 +66,7 @@ def _learning_rate_decay(init_lr, global_step, num_gpu=1):
     # Noam scheme from tensor2tensor:
     warmup_steps = 4000.0
     step = tf.cast(global_step * (num_gpu + 1) / 2 + 1, dtype=tf.float32)
-    return init_lr * warmup_steps ** 0.5 * tf.minimum(step * warmup_steps ** -1.5, step ** -0.5) * (num_gpu + 1) / 2
+    return init_lr * warmup_steps ** 0.05 * tf.minimum(step * warmup_steps ** -1.05, step ** -0.05) * (num_gpu + 1) / 2
 # ---------------------------------------------------------------------------------
 
 
@@ -87,6 +87,12 @@ def train(log_dir, args):
     #hparams.num_GPU = len(GPUs_id)
     #hparams.datasets = eval(args.datasets)
     hparams.datasets = eval(args.datasets)
+    hparams.prenet_layer1 = args.prenet_layer1
+    hparams.prenet_layer2 = args.prenet_layer2
+    hparams.gru_size = args.gru_size
+    hparams.attention_size = args.attention_size
+
+
     if args.batch_size:
       hparams.batch_size = args.batch_size
 
@@ -244,8 +250,13 @@ def main():
   parser.add_argument('--git', action='store_true', help='If set, verify that the client is clean.')
   parser.add_argument('--GPUs_id', default='[0]', help='The GPUs\' id list that will be used. Default is 0')
   parser.add_argument('--description', default=None, help='description of the model')
-  parser.add_argument('--datasets', default="['npy_ljspeech']", help='the datasets used for training')# "['npy_vctk', 'npy_ljspeech']"
+  parser.add_argument('--datasets', default="['npy_ljspeech','npy_vctk']", help='the datasets used for training')# "['npy_vctk', 'npy_ljspeech']"
   parser.add_argument('--batch_size', default=None, type=int, help='batch_size')  #
+  parser.add_argument('--prenet_layer1', default=256, type=int, help='batch_size')  #
+  parser.add_argument('--prenet_layer2', default=128, type=int, help='batch_size')  #
+  parser.add_argument('--gru_size', default=256, type=int, help='batch_size')  #
+  parser.add_argument('--attention_size', default=256, type=int, help='batch_size')  #
+  parser.add_argument('--attention_size', default=256, type=int, help='batch_size')  #
 
 
   args = parser.parse_args()
