@@ -281,7 +281,7 @@ def main():
   parser.add_argument('--gru_size', default=256, type=int, help='gru_size')  #
   parser.add_argument('--attention_size', default=256, type=int, help='attention_size')  #
   parser.add_argument('--rnn_size', default=256, type=int, help='rnn_size')  #
-  parser.add_argument('--weight_decay', default=0, type=int, help='weight_decay')  #
+  parser.add_argument('--weight_decay', default=0, type=float, help='weight_decay')  #
 
 
   args = parser.parse_args()
