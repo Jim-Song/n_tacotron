@@ -146,6 +146,22 @@ def train(log_dir, args):
                                  mel_targets=mel_targets[i], linear_targets=linear_targets[i],
                                  voice_print_feature=voice_print_feature)
             models[i].add_loss()
+
+
+            """L2 weight decay loss."""
+            if args.weight_decay > 0:
+              costs = []
+              for var in tf.trainable_variables():
+                #if var.op.name.find(r'DW') > 0:
+                costs.append(tf.nn.l2_loss(var))
+                  # tf.summary.histogram(var.op.name, var)
+              weight_decay = tf.cast(args.weight_decay, tf.float32)
+              cost = models[i].loss
+              models[i].loss += tf.multiply(weight_decay, tf.add_n(costs))
+            else:
+              cost = models[i].loss
+
+
             tower_loss.append(models[i].loss)
 
             tf.get_variable_scope().reuse_variables()
@@ -191,14 +207,14 @@ def train(log_dir, args):
           start_time = time.time()
           model = models[0]
 
-          step, loss, opt = sess.run([global_step, models[0].loss, apply_gradient_op])
+          step, loss, opt , loss_wd = sess.run([global_step, cost, apply_gradient_op, model.loss])
           feeder._batch_in_queue -= 1
           log('feed._batch_in_queue: %s' % str(feeder._batch_in_queue), slack=True)
 
           time_window.append(time.time() - start_time)
           loss_window.append(loss)
-          message = 'Step %-7d [%.03f sec/step, loss=%.05f, avg_loss=%.05f]' % (
-            step, time_window.average, loss, loss_window.average)
+          message = 'Step %-7d [%.03f sec/step, loss=%.05f, avg_loss=%.05f, loss_wd=%.05f]' % (
+            step, time_window.average, loss, loss_window.average, loss_wd)
           log(message, slack=(step % args.checkpoint_interval == 0))
 
           #if the gradient seems to explode, then restore to the previous step
@@ -260,11 +276,12 @@ def main():
   parser.add_argument('--description', default=None, help='description of the model')
   parser.add_argument('--datasets', default="['npy_ljspeech','npy_vctk']", help='the datasets used for training')# "['npy_vctk', 'npy_ljspeech']"
   parser.add_argument('--batch_size', default=None, type=int, help='batch_size')  #
-  parser.add_argument('--prenet_layer1', default=256, type=int, help='batch_size')  #
-  parser.add_argument('--prenet_layer2', default=128, type=int, help='batch_size')  #
-  parser.add_argument('--gru_size', default=256, type=int, help='batch_size')  #
-  parser.add_argument('--attention_size', default=256, type=int, help='batch_size')  #
-  parser.add_argument('--rnn_size', default=256, type=int, help='batch_size')  #
+  parser.add_argument('--prenet_layer1', default=256, type=int, help='prenet_layer1')  #
+  parser.add_argument('--prenet_layer2', default=128, type=int, help='prenet_layer2')  #
+  parser.add_argument('--gru_size', default=256, type=int, help='gru_size')  #
+  parser.add_argument('--attention_size', default=256, type=int, help='attention_size')  #
+  parser.add_argument('--rnn_size', default=256, type=int, help='rnn_size')  #
+  parser.add_argument('--weight_decay', default=0, type=int, help='weight_decay')  #
 
 
   args = parser.parse_args()
