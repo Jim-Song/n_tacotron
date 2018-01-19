@@ -36,8 +36,11 @@ def add_stats(model, gradients, learning_rate):
     tf.summary.scalar('learning_rate', learning_rate)
     tf.summary.scalar('loss', model.loss)
     gradient_norms = [tf.norm(grad) for grad in gradients]
+    gradient_norms_square = [(tf.norm(grad))**2 for grad in gradients]
     tf.summary.histogram('gradient_norm', gradient_norms)
     tf.summary.scalar('max_gradient_norm', tf.reduce_max(gradient_norms))
+    tf.summary.scalar('sum_gradient_norm', tf.reduce_sum(gradient_norms))
+    tf.summary.scalar('sum_square_gradient_norm', tf.reduce_sum(gradient_norms_square))
     return tf.summary.merge_all()
 
 
@@ -64,9 +67,9 @@ def average_gradients(tower_grads):
 
 def _learning_rate_decay(init_lr, global_step, num_gpu=1):
     # Noam scheme from tensor2tensor:
-    warmup_steps = 4000.0
+    warmup_steps = 12000.0
     step = tf.cast(global_step * (num_gpu + 1) / 2 + 1, dtype=tf.float32)
-    return init_lr * warmup_steps ** 0.05 * tf.minimum(step * warmup_steps ** -1.05, step ** -0.05) * (num_gpu + 1) / 2
+    return init_lr * warmup_steps ** 0.2 * tf.minimum(step * warmup_steps ** -1.2, step ** -0.2) * (num_gpu + 1) / 2
 # ---------------------------------------------------------------------------------
 
 
@@ -91,6 +94,7 @@ def train(log_dir, args):
     hparams.prenet_layer2 = args.prenet_layer2
     hparams.gru_size = args.gru_size
     hparams.attention_size = args.attention_size
+    hparams.rnn_size = args.rnn_size
 
 
     if args.batch_size:
@@ -198,21 +202,25 @@ def train(log_dir, args):
           log(message, slack=(step % args.checkpoint_interval == 0))
 
           #if the gradient seems to explode, then restore to the previous step
-          if loss > 2 * loss_window.average:
+          if loss > 2 * loss_window.average or math.isnan(loss):
             log('recover to the previous checkpoint')
             #tf.reset_default_graph()
-            restore_step = int((step - 1) / args.checkpoint_interval) * args.checkpoint_interval
+            restore_step = int((step - 10) / args.checkpoint_interval) * args.checkpoint_interval
             restore_path = '%s-%d' % (checkpoint_path, restore_step)
             saver.restore(sess, restore_path)
+            continue
 
 
           if loss > 100 or math.isnan(loss):
             log('Loss exploded to %.05f at step %d!' % (loss, step), slack=True)
             raise Exception('Loss Exploded')
 
-          if step % args.summary_interval == 0:
-            log('Writing summary at step: %d' % step)
-            summary_writer.add_summary(sess.run(stats), step)
+          try:
+            if step % args.summary_interval == 0:
+              log('Writing summary at step: %d' % step)
+              summary_writer.add_summary(sess.run(stats), step)
+          except:
+            pass
 
           if step % args.checkpoint_interval == 0:
             log('Saving checkpoint to: %s-%d' % (checkpoint_path, step))
@@ -256,7 +264,7 @@ def main():
   parser.add_argument('--prenet_layer2', default=128, type=int, help='batch_size')  #
   parser.add_argument('--gru_size', default=256, type=int, help='batch_size')  #
   parser.add_argument('--attention_size', default=256, type=int, help='batch_size')  #
-  parser.add_argument('--attention_size', default=256, type=int, help='batch_size')  #
+  parser.add_argument('--rnn_size', default=256, type=int, help='batch_size')  #
 
 
   args = parser.parse_args()

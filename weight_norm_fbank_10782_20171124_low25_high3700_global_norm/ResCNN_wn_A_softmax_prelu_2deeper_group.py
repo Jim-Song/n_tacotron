@@ -95,7 +95,7 @@ class ResCNN(object):
       x = tf.reshape(x, [self.batch_size, int(2048/64*self._hparams.num_mels)])
       #print(x.get_shape())
       #print('1')
-      x = self._fully_connected_wn(x, 1024)
+      x = self._fully_connected_wn(x, self._hparams.voice_print_size)
 
     #with tf.variable_scope('logit'):
 
@@ -312,7 +312,7 @@ class ResCNN(object):
   def _fully_connected_wn(self, x, out_dim, init_scale=1.):
     #x = tf.reshape(x, [self.batch_size, -1])
     #print(x.get_shape())
-    w = tf.get_variable('DW', [x.get_shape()[1], 1024], tf.float32, tf.random_normal_initializer(0, 0.05), trainable=True)
+    w = tf.get_variable('DW', [x.get_shape()[1], self._hparams.voice_print_size], tf.float32, tf.random_normal_initializer(0, 0.05), trainable=True)
     g = tf.get_variable('g', [out_dim], dtype=tf.float32, initializer=tf.constant_initializer(1.0, tf.float32), trainable=True)
     b = tf.get_variable('b', [out_dim], dtype=tf.float32, initializer=tf.constant_initializer(0.0, tf.float32), trainable=True)
     x = tf.matmul(x, w)

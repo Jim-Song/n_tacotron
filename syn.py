@@ -37,6 +37,7 @@ def main():
   parser.add_argument('--prenet_layer2', default=128, type=int, help='batch_size')  #
   parser.add_argument('--gru_size', default=256, type=int, help='batch_size')  #
   parser.add_argument('--attention_size', default=256, type=int, help='batch_size')  #
+  parser.add_argument('--rnn_size', default=256, type=int, help='batch_size')  #
 
   args = parser.parse_args()
 
@@ -44,11 +45,10 @@ def main():
   hparams.prenet_layer2 = args.prenet_layer2
   hparams.gru_size = args.gru_size
   hparams.attention_size = args.attention_size
+  hparams.rnn_size = args.rnn_size
 
   #log_dir = os.path.join(args.base_dir, 'logs-%s-%s' % (run_name, args.description))
   os.makedirs(os.path.join(args.output_dir, args.output_prefix), exist_ok=True)
-
-
 
   mel_spectrograms = []
   for wav_file in os.listdir(args.wav_path):
@@ -78,7 +78,6 @@ def main():
 
     out = os.path.join(args.output_dir, args.output_prefix, text+'.wav')
     audio.save_wav(wav, out)
-
 
 _pad = 0
 

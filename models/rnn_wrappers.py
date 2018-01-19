@@ -52,9 +52,10 @@ class ConcatOutputAndAttentionWrapper(RNNCell):
   attention_layer_size=None and output_attention=False. Such a cell's state will include an
   "attention" field that is the context vector.
   '''
-  def __init__(self, cell):
+  def __init__(self, cell, voice_print_feature=None):
     super(ConcatOutputAndAttentionWrapper, self).__init__()
     self._cell = cell
+    self._voice_print_feature = voice_print_feature
 
   @property
   def state_size(self):
@@ -66,7 +67,7 @@ class ConcatOutputAndAttentionWrapper(RNNCell):
 
   def call(self, inputs, state):
     output, res_state = self._cell(inputs, state)
-    return tf.concat([output, res_state.attention], axis=-1), res_state
+    return tf.concat([output, res_state.attention, self._voice_print_feature], axis=-1), res_state
 
   def zero_state(self, batch_size, dtype):
     return self._cell.zero_state(batch_size, dtype)

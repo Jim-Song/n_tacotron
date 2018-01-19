@@ -57,21 +57,25 @@ class Tacotron():
       # Encoder
       prenet_outputs = prenet(embedded_inputs, is_training)                       # [N, T_in, 128]
       encoder_outputs = encoder_cbhg(prenet_outputs, input_lengths, is_training)  # [N, T_in, 256]
+
+      #voice print feature
+      voice_print_feature1 = tf.tile([voice_print_feature[:int(self._hparams.voice_print_size/2)]], [batch_size, 1])
+      voice_print_feature2 = tf.tile([voice_print_feature[int(self._hparams.voice_print_size/2):]], [batch_size, 1])
+
       # Attention
-      voice_print_feature = tf.tile([voice_print_feature], [batch_size, 1])
       attention_cell = AttentionWrapper(
-        DecoderPrenetWrapper(GRUCell(hp.gru_size), is_training, voice_print_feature=voice_print_feature,
+        DecoderPrenetWrapper(GRUCell(hp.gru_size), is_training, voice_print_feature=voice_print_feature1,
                              prenet_layer1=hp.prenet_layer1, prenet_layer2=hp.prenet_layer2),
         BahdanauAttention(hp.attention_size, encoder_outputs),
         alignment_history=True,
         output_attention=False)                                                  # [N, T_in, 256]
       # Concatenate attention context vector and RNN cell output into a 512D vector.
-      concat_cell = ConcatOutputAndAttentionWrapper(attention_cell)              # [N, T_in, 512]
+      concat_cell = ConcatOutputAndAttentionWrapper(attention_cell, voice_print_feature=voice_print_feature2) # [N, T_in, 512]
       # Decoder (layers specified bottom to top):
       decoder_cell = MultiRNNCell([
-          OutputProjectionWrapper(concat_cell, 256),
-          ResidualWrapper(GRUCell(256)),
-          ResidualWrapper(GRUCell(256))
+          OutputProjectionWrapper(concat_cell, self._hparams.rnn_size),
+          ResidualWrapper(GRUCell(self._hparams.rnn_size)),
+          ResidualWrapper(GRUCell(self._hparams.rnn_size))
         ], state_is_tuple=True)                                                  # [N, T_in, 256]
 
       # Project onto r mel spectrograms (predict r outputs at each RNN step):
