@@ -61,16 +61,20 @@ class Tacotron():
       #voice print feature
       voice_print_feature1 = tf.tile([voice_print_feature[:int(self._hparams.voice_print_size/2)]], [batch_size, 1])
       voice_print_feature2 = tf.tile([voice_print_feature[int(self._hparams.voice_print_size/2):]], [batch_size, 1])
+      #if hp.prenet_layer1 == 256:
+      #  voice_print_feature1 = None
+      #if hp.rnn_size == 256:
+      #  voice_print_feature2 = None
 
       # Attention
       attention_cell = AttentionWrapper(
         DecoderPrenetWrapper(GRUCell(hp.gru_size), is_training, voice_print_feature=voice_print_feature1,
-                             prenet_layer1=hp.prenet_layer1, prenet_layer2=hp.prenet_layer2),
+                             prenet_layer1=hp.prenet_layer1, prenet_layer2=hp.prenet_layer2, enable_fv1=hp.enable_fv1),
         BahdanauAttention(hp.attention_size, encoder_outputs),
         alignment_history=True,
         output_attention=False)                                                  # [N, T_in, 256]
       # Concatenate attention context vector and RNN cell output into a 512D vector.
-      concat_cell = ConcatOutputAndAttentionWrapper(attention_cell, voice_print_feature=voice_print_feature2) # [N, T_in, 512]
+      concat_cell = ConcatOutputAndAttentionWrapper(attention_cell, voice_print_feature=voice_print_feature2, enable_fv2=hp.enable_fv2) # [N, T_in, 512]
       # Decoder (layers specified bottom to top):
       decoder_cell = MultiRNNCell([
           OutputProjectionWrapper(concat_cell, self._hparams.rnn_size),

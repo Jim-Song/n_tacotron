@@ -67,9 +67,9 @@ def average_gradients(tower_grads):
 
 def _learning_rate_decay(init_lr, global_step, num_gpu=1):
     # Noam scheme from tensor2tensor:
-    warmup_steps = 12000.0
+    warmup_steps = 20000.0
     step = tf.cast(global_step * (num_gpu + 1) / 2 + 1, dtype=tf.float32)
-    return init_lr * warmup_steps ** 0.2 * tf.minimum(step * warmup_steps ** -1.2, step ** -0.2) * (num_gpu + 1) / 2
+    return init_lr * warmup_steps ** 0.4 * tf.minimum(step * warmup_steps ** -1.4, step ** -0.4) * (num_gpu + 1) / 2
 # ---------------------------------------------------------------------------------
 
 
@@ -95,6 +95,8 @@ def train(log_dir, args):
     hparams.gru_size = args.gru_size
     hparams.attention_size = args.attention_size
     hparams.rnn_size = args.rnn_size
+    hparams.enable_fv1 = args.enable_fv1
+    hparams.enable_fv2 = args.enable_fv2
 
 
     if args.batch_size:
@@ -107,7 +109,7 @@ def train(log_dir, args):
     tower_loss = []
     models = []
 
-    global_step = tf.Variable(0, name='global_step', trainable=False)
+    global_step = tf.Variable(-1, name='global_step', trainable=False)
     if hparams.decay_learning_rate:
       learning_rate = _learning_rate_decay(hparams.initial_learning_rate, global_step, hparams.num_GPU)
     else:
@@ -133,11 +135,13 @@ def train(log_dir, args):
         with tf.device('/gpu:%d' % GPU_id):
           with tf.name_scope('GPU_%d' % GPU_id):
 
+            if hparams.enable_fv1 and hparams.enable_fv2:
+              net = ResCNN(data=mel_targets[i], batch_size=hparams.batch_size, hyparam=hparams)
+              net.inference()
 
-            net = ResCNN(data=mel_targets[i], batch_size=hparams.batch_size, hyparam=hparams)
-            net.inference()
-
-            voice_print_feature = tf.reduce_mean(net.features, 0)
+              voice_print_feature = tf.reduce_mean(net.features, 0)
+            else:
+              voice_print_feature = None
 
 
             models.append(None)
@@ -158,8 +162,10 @@ def train(log_dir, args):
               weight_decay = tf.cast(args.weight_decay, tf.float32)
               cost = models[i].loss
               models[i].loss += tf.multiply(weight_decay, tf.add_n(costs))
+              cost_pure_wd = tf.multiply(weight_decay, tf.add_n(costs))
             else:
               cost = models[i].loss
+              cost_pure_wd = tf.constant([0])
 
 
             tower_loss.append(models[i].loss)
@@ -207,14 +213,14 @@ def train(log_dir, args):
           start_time = time.time()
           model = models[0]
 
-          step, loss, opt , loss_wd = sess.run([global_step, cost, apply_gradient_op, model.loss])
+          step, loss, opt , loss_wd, loss_pure_wd = sess.run([global_step, cost, apply_gradient_op, model.loss, cost_pure_wd])
           feeder._batch_in_queue -= 1
           log('feed._batch_in_queue: %s' % str(feeder._batch_in_queue), slack=True)
 
           time_window.append(time.time() - start_time)
           loss_window.append(loss)
-          message = 'Step %-7d [%.03f sec/step, loss=%.05f, avg_loss=%.05f, loss_wd=%.05f]' % (
-            step, time_window.average, loss, loss_window.average, loss_wd)
+          message = 'Step %-7d [%.03f sec/step, loss=%.05f, avg_loss=%.05f, loss_wd=%.05f, loss_pure_wd=%.05f]' % (
+            step, time_window.average, loss, loss_window.average, loss_wd, loss_pure_wd)
           log(message, slack=(step % args.checkpoint_interval == 0))
 
           #if the gradient seems to explode, then restore to the previous step
@@ -282,6 +288,8 @@ def main():
   parser.add_argument('--attention_size', default=256, type=int, help='attention_size')  #
   parser.add_argument('--rnn_size', default=256, type=int, help='rnn_size')  #
   parser.add_argument('--weight_decay', default=0, type=float, help='weight_decay')  #
+  parser.add_argument('--enable_fv1', default=True, type=bool, help='enable_fv1')  #
+  parser.add_argument('--enable_fv2', default=True, type=bool, help='enable_fv2')  #
 
 
   args = parser.parse_args()

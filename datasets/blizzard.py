@@ -4,11 +4,11 @@ import numpy as np
 import os
 from hparams import hparams
 from util import audio
-
+import re
 
 _max_out_length = 700
 _end_buffer = 0.05
-_min_confidence = 90
+_min_confidence = 50
 
 # Note: "A Tramp Abroad" & "The Man That Corrupted Hadleyburg" are higher quality than the others.
 books = [
@@ -23,13 +23,14 @@ def build_from_path(in_dir, out_dir, num_workers=1, tqdm=lambda x: x):
   futures = []
   index = 1
   for book in books:
-    with open(os.path.join(in_dir, book, 'sentence_index.txt')) as f:
+    with open(os.path.join(in_dir, book, book, 'sentence_index.txt')) as f:
       for line in f:
         parts = line.strip().split('\t')
         if line[0] is not '#' and len(parts) == 8 and float(parts[3]) > _min_confidence:
-          wav_path = os.path.join(in_dir, book, 'wav', '%s.wav' % parts[0])
-          labels_path = os.path.join(in_dir, book, 'lab', '%s.lab' % parts[0])
+          wav_path = os.path.join(in_dir, book, book, 'wav', '%s.wav' % parts[0])
+          labels_path = os.path.join(in_dir, book, book, 'lab', '%s.lab' % parts[0])
           text = parts[5]
+          text = re.sub('\|', ' ', text)
           task = partial(_process_utterance, out_dir, index, wav_path, labels_path, text)
           futures.append(executor.submit(task))
           index += 1
@@ -37,7 +38,7 @@ def build_from_path(in_dir, out_dir, num_workers=1, tqdm=lambda x: x):
   return [r for r in results if r is not None]
 
 
-def _process_utterance(out_dir, index, wav_path, labels_path, text):
+def _process_utterance(out_dir, index, wav_path, labels_path, text, person_id=1):
   # Load the wav file and trim silence from the ends:
   wav = audio.load_wav(wav_path)
   start_offset, end_offset = _parse_labels(labels_path)
@@ -54,7 +55,7 @@ def _process_utterance(out_dir, index, wav_path, labels_path, text):
   mel_filename = 'blizzard-mel-%05d.npy' % index
   np.save(os.path.join(out_dir, spectrogram_filename), spectrogram.T, allow_pickle=False)
   np.save(os.path.join(out_dir, mel_filename), mel_spectrogram.T, allow_pickle=False)
-  return (spectrogram_filename, mel_filename, n_frames, text)
+  return (spectrogram_filename, mel_filename, n_frames, text, person_id)
 
 
 def _parse_labels(path):
@@ -66,8 +67,8 @@ def _parse_labels(path):
         labels.append((float(parts[0]), ' '.join(parts[2:])))
   start = 0
   end = None
-  if labels[0][1] == 'sil':
+  if labels[0][1] == 'sil' or labels[0][2] == 'sil':
     start = labels[0][0]
-  if labels[-1][1] == 'sil':
+  if labels[-1][1] == 'sil' or labels[-1][2] == 'sil':
     end = labels[-2][0] + _end_buffer
   return (start, end)
