@@ -4,7 +4,7 @@ from synthesizer import Synthesizer
 import os
 import numpy as np
 from hparams import hparams
-
+from util import plot
 
 
 
@@ -38,6 +38,8 @@ def main():
   parser.add_argument('--gru_size', default=256, type=int, help='batch_size')  #
   parser.add_argument('--attention_size', default=256, type=int, help='batch_size')  #
   parser.add_argument('--rnn_size', default=256, type=int, help='batch_size')  #
+  parser.add_argument('--enable_fv1', default=True, type=bool, help='enable_fv1')  #
+  parser.add_argument('--enable_fv2', default=True, type=bool, help='enable_fv2')  #
 
   args = parser.parse_args()
 
@@ -46,38 +48,49 @@ def main():
   hparams.gru_size = args.gru_size
   hparams.attention_size = args.attention_size
   hparams.rnn_size = args.rnn_size
-
-  #log_dir = os.path.join(args.base_dir, 'logs-%s-%s' % (run_name, args.description))
-  os.makedirs(os.path.join(args.output_dir, args.output_prefix), exist_ok=True)
-
-  mel_spectrograms = []
-  for wav_file in os.listdir(args.wav_path):
-
-    # Load the audio to a numpy array:
-    wav = audio.load_wav(os.path.join(args.wav_path, wav_file))
-
-    # Compute the linear-scale spectrogram from the wav:
-    # spectrogram = audio.spectrogram(wav).astype(np.float32)
-
-    # Compute a mel-scale spectrogram from the wav:
-    mel_spectrogram = audio.melspectrogram(wav).astype(np.float32).T
-    mel_spectrograms.append(mel_spectrogram)
-    print(wav_file)
-    print(np.shape(mel_spectrogram))
-
-  print(np.shape(mel_spectrograms))
-
-  mel_spectrograms = _prepare_targets(mel_spectrograms, 1)
+  hparams.enable_fv1 = args.enable_fv1
+  hparams.enable_fv2 = args.enable_fv2
 
   synthesizer = Synthesizer(hparams)
   synthesizer.load(args.model_path)
 
-  for text in sentences:
+  for person_id in os.listdir(args.wav_path):
 
-    wav = synthesizer.synthesize(text=text, mel_spec=mel_spectrograms)
+    #log_dir = os.path.join(args.base_dir, 'logs-%s-%s' % (run_name, args.description))
+    os.makedirs(os.path.join(args.output_dir, args.output_prefix + person_id), exist_ok=True)
+    current_dir = os.path.join(args.output_dir, args.output_prefix + person_id)
 
-    out = os.path.join(args.output_dir, args.output_prefix, text+'.wav')
-    audio.save_wav(wav, out)
+    mel_spectrograms = []
+    for wav_file in os.listdir(os.path.join(args.wav_path, person_id)):
+
+      # Load the audio to a numpy array:
+      wav = audio.load_wav(os.path.join(args.wav_path, person_id, wav_file))
+
+      # Compute the linear-scale spectrogram from the wav:
+      # spectrogram = audio.spectrogram(wav).astype(np.float32)
+
+      # Compute a mel-scale spectrogram from the wav:
+      mel_spectrogram = audio.melspectrogram(wav).astype(np.float32).T
+      mel_spectrograms.append(mel_spectrogram)
+      print(wav_file)
+      print(np.shape(mel_spectrogram))
+
+    print(np.shape(mel_spectrograms))
+
+    mel_spectrograms = _prepare_targets(mel_spectrograms, 1)
+
+
+
+    for text in sentences:
+
+      wav, alignment = synthesizer.synthesize(text=text, mel_spec=mel_spectrograms)
+
+      print(alignment.shape)
+
+      plot.plot_alignment(alignment, os.path.join(current_dir, text+'.png'))
+
+      out = os.path.join(current_dir, text+'.wav')
+      audio.save_wav(wav, out)
 
 _pad = 0
 

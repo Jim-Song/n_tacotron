@@ -2,6 +2,7 @@ import numpy as np
 import tensorflow as tf
 from tensorflow.contrib.rnn import RNNCell
 from .modules import prenet
+import time
 
 
 class DecoderPrenetWrapper(RNNCell):
@@ -24,13 +25,16 @@ class DecoderPrenetWrapper(RNNCell):
     return self._cell.output_size
 
   def call(self, inputs, state):
+    print(self._enable_fv1)
     if not self._enable_fv1:
       prenet_out = prenet(inputs, self._is_training, scope='decoder_prenet')
+
       return self._cell(prenet_out, state)
     else:
       temp = tf.concat([inputs, self._voice_print_feature], 1)
       prenet_out = prenet(temp, self._is_training,
                           scope='decoder_prenet', layer_sizes=[self._prenet_layer1, self._prenet_layer2])
+
 
       #prenet_out2 = prenet(self._voice_print_feature, self._is_training, scope='decoder_prenet2')
       return self._cell(prenet_out, state)

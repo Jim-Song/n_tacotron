@@ -35,11 +35,57 @@ def add_stats(model, gradients, learning_rate):
     tf.summary.scalar('loss_linear', model.linear_loss)
     tf.summary.scalar('learning_rate', learning_rate)
     tf.summary.scalar('loss', model.loss)
-    gradient_norms = [tf.norm(grad) for grad in gradients]
+
+    name_list = [('model/unit_1', 'unit_1'),
+                 ('model/unit_2', 'unit_2'),
+                 ('model/unit_last', 'unit_last'),
+                 ('model/unit_ln', 'unit_ln'),
+                 ('model/inference/embedding', 'embedding'),
+                 ('model/inference/prenet', 'encoder_prenet'),
+                 ('model/inference/encoder_cbhg', 'encoder_cbhg'),
+                 ('model/inference/decoder/output_projection_wrapper/multi_rnn_cell/cell_0/output_projection_wrapper/concat_output_and_attention_wrapper/attention_wrapper/decoder_prenet_wrapper/decoder_prenet', 'decoder_prenet'),
+                 ('model/inference/decoder/output_projection_wrapper/multi_rnn_cell/cell_0/output_projection_wrapper/concat_output_and_attention_wrapper/attention_wrapper/decoder_prenet_wrapper/gru_cell', 'gru_cell'),
+                 ('model/inference/decoder/output_projection_wrapper/multi_rnn_cell/cell_0/output_projection_wrapper/concat_output_and_attention_wrapper/attention_wrapper/bahdanau_attention', 'bahdanau_attention'),
+                 ('model/inference/decoder/output_projection_wrapper/multi_rnn_cell/cell_0/output_projection_wrapper/kernel', 'kernel1'),
+                 ('model/inference/decoder/output_projection_wrapper/multi_rnn_cell/cell_0/output_projection_wrapper/bias', 'bias1'),
+                 ('model/inference/decoder/output_projection_wrapper/multi_rnn_cell/cell_1', 'cell1'),
+                 ('model/inference/decoder/output_projection_wrapper/multi_rnn_cell/cell_2', 'cell2'),
+                 ('model/inference/decoder/output_projection_wrapper/kernel', 'kernel2'),
+                 ('model/inference/decoder/output_projection_wrapper/bias', 'bias2'),
+                 ('model/inference/post_cbhg', 'post_cbhg')]
+
+    gradient_norms = []
+    for _ in name_list:
+      gradient_norms.append([])
+    gradient_norms.append([])
+
+    for grad in gradients:
+      in_name_list = False
+      #print(grad[1].op.name)
+      #print('----------------------------------------------------------------------')
+      for index, name in enumerate(name_list):
+        if grad[1].op.name.find(name[0]) > -1:
+          #print(index)
+          in_name_list = True
+          gradient_norms[index].append(tf.norm(grad))
+      if not in_name_list:
+        gradient_norms[-1].append(tf.norm(grad))
+
+    for index, name in enumerate(name_list):
+      gradient_norm = gradient_norms[index]
+      tf.summary.histogram('gradient_norm_' + name[1], gradient_norm)
+      tf.summary.scalar('max_gradient_norm_' + name[1], tf.reduce_max(gradient_norm))
+      tf.summary.scalar('sum_gradient_norm_' + name[1], tf.reduce_sum(gradient_norm))
+
+    tf.summary.histogram('gradient_norm' + '_not_in_list', gradient_norms[-1])
+    tf.summary.scalar('max_gradient_norm' + '_not_in_list', tf.reduce_max(gradient_norms[-1]))
+    tf.summary.scalar('sum_gradient_norm' + '_not_in_list', tf.reduce_sum(gradient_norms[-1]))
+
+    gradient_norms2 = [tf.norm(grad) for grad in gradients]
     gradient_norms_square = [(tf.norm(grad))**2 for grad in gradients]
-    tf.summary.histogram('gradient_norm', gradient_norms)
-    tf.summary.scalar('max_gradient_norm', tf.reduce_max(gradient_norms))
-    tf.summary.scalar('sum_gradient_norm', tf.reduce_sum(gradient_norms))
+    tf.summary.histogram('gradient_norm', gradient_norms2)
+    tf.summary.scalar('max_gradient_norm', tf.reduce_max(gradient_norms2))
+    tf.summary.scalar('sum_gradient_norm', tf.reduce_sum(gradient_norms2))
     tf.summary.scalar('sum_square_gradient_norm', tf.reduce_sum(gradient_norms_square))
     return tf.summary.merge_all()
 
@@ -135,7 +181,7 @@ def train(log_dir, args):
         with tf.device('/gpu:%d' % GPU_id):
           with tf.name_scope('GPU_%d' % GPU_id):
 
-            if hparams.enable_fv1 and hparams.enable_fv2:
+            if hparams.enable_fv1 or hparams.enable_fv2:
               net = ResCNN(data=mel_targets[i], batch_size=hparams.batch_size, hyparam=hparams)
               net.inference()
 
@@ -172,12 +218,14 @@ def train(log_dir, args):
 
             tf.get_variable_scope().reuse_variables()
             models[i].add_optimizer(global_step, optimizer)
+
             tower_grads.append(models[i].gradients)
 
       # calculate average gradient
       gradients = average_gradients(tower_grads)
-      stats = add_stats(models[0], gradients, learning_rate)
 
+      stats = add_stats(models[0], gradients, learning_rate)
+      time.sleep(10)
 
     # apply average gradient
 

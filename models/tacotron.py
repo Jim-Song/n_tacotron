@@ -59,8 +59,12 @@ class Tacotron():
       encoder_outputs = encoder_cbhg(prenet_outputs, input_lengths, is_training)  # [N, T_in, 256]
 
       #voice print feature
-      voice_print_feature1 = tf.tile([voice_print_feature[:int(self._hparams.voice_print_size/2)]], [batch_size, 1])
-      voice_print_feature2 = tf.tile([voice_print_feature[int(self._hparams.voice_print_size/2):]], [batch_size, 1])
+      if voice_print_feature is not None:
+        voice_print_feature1 = tf.tile([voice_print_feature[:int(self._hparams.voice_print_size/2)]], [batch_size, 1])
+        voice_print_feature2 = tf.tile([voice_print_feature[int(self._hparams.voice_print_size/2):]], [batch_size, 1])
+      else:
+        voice_print_feature1, voice_print_feature2 = None, None
+
       #if hp.prenet_layer1 == 256:
       #  voice_print_feature1 = None
       #if hp.rnn_size == 256:
@@ -73,14 +77,16 @@ class Tacotron():
         BahdanauAttention(hp.attention_size, encoder_outputs),
         alignment_history=True,
         output_attention=False)                                                  # [N, T_in, 256]
+
       # Concatenate attention context vector and RNN cell output into a 512D vector.
       concat_cell = ConcatOutputAndAttentionWrapper(attention_cell, voice_print_feature=voice_print_feature2, enable_fv2=hp.enable_fv2) # [N, T_in, 512]
       # Decoder (layers specified bottom to top):
-      decoder_cell = MultiRNNCell([
-          OutputProjectionWrapper(concat_cell, self._hparams.rnn_size),
-          ResidualWrapper(GRUCell(self._hparams.rnn_size)),
-          ResidualWrapper(GRUCell(self._hparams.rnn_size))
-        ], state_is_tuple=True)                                                  # [N, T_in, 256]
+      with tf.variable_scope('multirnncell') as scope:
+        decoder_cell = MultiRNNCell([
+            OutputProjectionWrapper(concat_cell, self._hparams.rnn_size),
+            ResidualWrapper(GRUCell(self._hparams.rnn_size)),
+            ResidualWrapper(GRUCell(self._hparams.rnn_size))
+          ], state_is_tuple=True)                                                  # [N, T_in, 256]
 
       # Project onto r mel spectrograms (predict r outputs at each RNN step):
       output_cell = OutputProjectionWrapper(decoder_cell, hp.num_mels * hp.outputs_per_step)
